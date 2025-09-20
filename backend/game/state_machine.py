@@ -1,7 +1,6 @@
 from enum import Enum, auto
 import uuid
 import random
-import 
 
 THEMES = ["Space Crew vs. Aliens: A spaceship floating in deep space, some crew members are secretly aliens trying to sabotage the mission",
           "Medieval Kingdom: A kingdom where some nobles are secretly plotting to overthrow the king",
@@ -64,7 +63,11 @@ class MafiaGame:
         """Eliminate a player from the game."""
         if player_id in self.players:
             self.players[player_id]["player_obj"].eliminate()
-            self.story_log.append({"event": f"Player Eliminated: {self.players[player_id]["name"]}", "player_id": player_id})
+            self.story_log.append({
+                                    "event": f"Player Eliminated: {self.players[player_id]['name']}",
+                                    "player_id": player_id
+                                })
+
     
     def is_game_over(self):
         """Check win condition (simplified)."""
