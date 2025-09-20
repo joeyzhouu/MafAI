@@ -1,6 +1,11 @@
-import requests, os
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 API_KEY = os.getenv("GEMINI_API_KEY")
+
+print("Gemini API Key Loaded:", API_KEY is not None)
 
 def generate_story(prompt):
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent"
