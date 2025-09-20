@@ -57,7 +57,11 @@ class MafiaGame:
         """Eliminate a player from the game."""
         if player_id in self.players:
             self.players[player_id]["player_obj"].eliminate()
-            self.story_log.append({"event": f"Player Eliminated: {self.players[player_id]["name"]}", "player_id": player_id})
+            self.story_log.append({
+                                    "event": f"Player Eliminated: {self.players[player_id]['name']}",
+                                    "player_id": player_id
+                                })
+
     
     def is_game_over(self):
         """Check win condition (simplified)."""
