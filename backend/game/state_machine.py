@@ -1,7 +1,6 @@
 from enum import Enum, auto
 import uuid
 import random
-import 
 
 THEMES = ["Space Crew vs. Aliens: A spaceship floating in deep space, some crew members are secretly aliens trying to sabotage the mission",
           "Medieval Kingdom: A kingdom where some nobles are secretly plotting to overthrow the king",

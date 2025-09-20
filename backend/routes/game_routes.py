@@ -31,7 +31,8 @@ def join_game():
     name = data["name"]
     if game_id in games:
         game = games[game_id]
-        game.add_player(player_id, name)
+        new_player = Player(name=name)
+        game.add_player(new_player)
         return jsonify({"status": "ok"})
     return jsonify({"error": "Game not found"}), 404
 
