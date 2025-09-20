@@ -4,7 +4,8 @@ from flask_socketio import SocketIO
 from routes.game_routes import game_bp
 from sockets import init_socketio   # import your socket handlers
 
-app = Flask(__name__)
+# app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static', static_folder='static')
 app.config['SECRET_KEY'] = 'mafai-secret'
 CORS(app, resources={r"/*": {"origins": "*"}})
 
@@ -19,3 +20,4 @@ init_socketio(socketio)
 
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5001, debug=True)
+    

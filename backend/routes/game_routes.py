@@ -5,11 +5,15 @@ from game.model import Player
 game_bp = Blueprint("game", __name__)
 games = {}   # in-memory game store {game_id: MafiaGame}
 
+
 @game_bp.route("/create", methods=["POST"])
 def create_game():
-    data = request.json
+    data = request.json or {}
     host_name = data.get("host_name")
     theme = data.get("theme")
+
+    if not host_name:
+        return jsonify({"error": "host_name is required"}), 400
 
     # Create host as a Player
     host_player = Player(name=host_name)
@@ -20,59 +24,100 @@ def create_game():
     return jsonify({
         "game_id": game.id,
         "host_id": host_player.player_id,
-        "player_id": host_player.player_id, 
+        "player_id": host_player.player_id,
         "game_state": game.get_state()
     })
 
+
 @game_bp.route("/join", methods=["POST"])
 def join_game():
-    data = request.json
-    game_id = data["game_id"]
-    name = data["name"]
-    if game_id in games:
-        game = games[game_id]
+    data = request.json or {}
+    game_id = data.get("game_id")
+    name = data.get("name")
+
+    if not game_id or not name:
+        return jsonify({"error": "game_id and name are required"}), 400
+
+    game = games.get(game_id)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+
+    try:
         new_player = Player(name=name)
         game.add_player(new_player)
-        return jsonify({"status": "ok"})
-    return jsonify({"error": "Game not found"}), 404
+        return jsonify({
+            "status": "ok",
+            "player_id": new_player.player_id,
+            "game_state": game.get_state()
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @game_bp.route("/state/<game_id>", methods=["GET"])
 def get_state(game_id):
-    if game_id not in games:
+    game = games.get(game_id)
+    if not game:
         return jsonify({"error": "Game not found"}), 404
-    game = games[game_id]
     return jsonify(game.get_state())
+
+
+@game_bp.route("/settings", methods=["POST"])
+def update_settings():
+    data = request.json or {}
+    game_id = data.get("game_id")
+    host_id = data.get("host_id")
+    new_settings = data.get("settings", {})
+
+    game = games.get(game_id)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+
+    try:
+        updated = game.update_settings(host_id, new_settings)
+        return jsonify({"status": "ok", "settings": updated})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @game_bp.route("/start", methods=["POST"])
 def start_game():
-    data = request.json
-    game_id = data["game_id"]
-    host_id = data["host_id"]
+    data = request.json or {}
+    game_id = data.get("game_id")
+    host_id = data.get("host_id")
 
-    if game_id not in games:
+    game = games.get(game_id)
+    if not game:
         return jsonify({"error": "Game not found"}), 404
-    
-    game = games[game_id]
 
     if host_id != game.host_id:
         return jsonify({"error": "Only host can start"}), 403
 
-    game.assign_roles()
-    return jsonify({"status": "started", "game_state": game.get_state()})
+    try:
+        game.start_game()
+        return jsonify({"status": "started", "game_state": game.get_state()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 
 @game_bp.route("/action", methods=["POST"])
 def player_action():
-    data = request.json
-    game_id = data["game_id"]
-    player_id = data["player_id"]
-    action = data["action"]   # e.g. {"type": "kill", "target": "p123"}
+    data = request.json or {}
+    game_id = data.get("game_id")
+    player_id = data.get("player_id")
+    action = data.get("action")   # {"type": "kill", "target": "<pid>"}
 
-    if game_id not in games:
+    game = games.get(game_id)
+    if not game:
         return jsonify({"error": "Game not found"}), 404
 
-    game = games[game_id]
-    # TODO: update game state machine based on action
-    return jsonify({"status": "received", "game_state": game.get_state()})
+    try:
+        game.record_action(player_id, action)
+
+        if game.all_night_actions_received():
+            result = game.resolve_night()
+            return jsonify({"status": "resolved", "result": result, "game_state": game.get_state()})
+
+        return jsonify({"status": "recorded", "game_state": game.get_state()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
