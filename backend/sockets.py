@@ -21,3 +21,5 @@ def init_socketio(sio):
         action = data["action"]
         # TODO: update MafiaGame state here
         emit("state_update", {"msg": f"Action received: {action}"}, room=game_id)
+
+    
