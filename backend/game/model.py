@@ -1,7 +1,9 @@
+import uuid
+
 class Player:
-    def __init__(self, player_id, name):
+    def __init__(self, name):
         """Initialize a player object."""
-        self.player_id = player_id
+        self.player_id = str(uuid.uuid4())[:8]
         self.name = name
         self.role = None
         self.is_alive = True
