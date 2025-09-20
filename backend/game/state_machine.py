@@ -17,7 +17,7 @@ class MafiaGame:
     def __init__(self, host_player, theme=None):
         self.id = str(uuid.uuid4())[:6]   # short join code
         self.state = GameState.LOBBY
-        self.host_id = host_player.get_info['player_id']  # track host’s player_id
+        self.host_id = host_player.get_info()['player_id']  # track host’s player_id
         self.theme = theme
         self.players = {}   # {player_id: {"name": str, "role": str, "alive": bool}}
         self.story_log = []
@@ -42,7 +42,7 @@ class MafiaGame:
         """Return list of players in the lobby."""
         return [{"player_id": pid, "name": info["name"]} for pid, info in self.players.items()]
     
-    def game_state(self):
+    def get_state(self):
         """Return current game state."""
         return {
             "id": self.id,
