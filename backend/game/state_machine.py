@@ -1,5 +1,11 @@
 from enum import Enum, auto
 import uuid
+import random
+import 
+
+THEMES = ["Space Crew vs. Aliens: A spaceship floating in deep space, some crew members are secretly aliens trying to sabotage the mission",
+          "Medieval Kingdom: A kingdom where some nobles are secretly plotting to overthrow the king",
+          "Whild West: A dusty frontier town where bandits hide among the locals, plotting to take over.",]
 
 class GameState(Enum):
     LOBBY = auto()
@@ -9,28 +15,29 @@ class GameState(Enum):
     END = auto()
 
 class MafiaGame:
-    def __init__(self, host_id, theme=None):
-        """Initialize a new Mafia game."""
+    def __init__(self, host_player, theme=None):
         self.id = str(uuid.uuid4())[:6]   # short join code
         self.state = GameState.LOBBY
-        self.host_id = host_id
+        self.host_id = host_player.get_info['player_id']  # track host’s player_id
         self.theme = theme
         self.players = {}   # {player_id: {"name": str, "role": str, "alive": bool}}
         self.story_log = []
         self.round = 0
         self.settings = {"mafia": 1, "doctor": 1, "detective": 1}
 
+        self.add_player(host_player)
+
     def add_player(self, player):
         """Add a player to the game lobby."""
         if self.state != GameState.LOBBY:
             raise Exception("Game already started")
-        
-        player_id = player.get_info()['player_id']
-        player_name = player.get_info()['name']
-        player_role = player.get_info().get('role', None)
-        player_alive = player.get_info().get('is_alive', True)
-        
-        self.players[player_id] = {"name": player_name, "role": player_role, "alive": player_alive, "player_obj": player}
+
+        info = player.get_info()
+        self.players[info["player_id"]] = {
+            "name": info["name"],
+            "role": info["role"],
+            "alive": info["is_alive"]
+        }
     
     def get_lobby_players(self):
         """Return list of players in the lobby."""
