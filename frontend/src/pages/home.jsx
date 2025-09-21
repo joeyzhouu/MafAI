@@ -1,13 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createGame, joinGame } from "../api/client";
-import { v4 as uuidv4 } from "uuid";
+import { createGame } from "../api/client";
 
 export default function Home() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
-  const [joinId, setJoinId] = useState("");
-  const [joining, setJoining] = useState(false);
 
   const handleCreate = async () => {
     if (!name.trim()) return alert("Please enter a name");
@@ -19,12 +16,9 @@ export default function Home() {
     });
   };
 
-  const handleJoin = async () => {
+  const handleJoinPage = () => {
     if (!name.trim()) return alert("Please enter a name");
-    if (!joinId.trim()) return alert("Enter a Game ID to join");
-    const playerId = uuidv4();
-    await joinGame(joinId, playerId, name);
-    navigate(`/room/${joinId}`, { state: { name, playerId } });
+    navigate("/join", { state: { name } });
   };
 
   return (
@@ -50,36 +44,12 @@ export default function Home() {
             Create Game
           </button>
 
-          {!joining ? (
-            <button
-              onClick={() => setJoining(true)}
-              className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-lg transition"
-            >
-              Join Game
-            </button>
-          ) : (
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Enter Game ID"
-                value={joinId}
-                onChange={(e) => setJoinId(e.target.value)}
-                className="w-full p-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button
-                onClick={handleJoin}
-                className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-lg transition"
-              >
-                Join Now
-              </button>
-              <button
-                onClick={() => setJoining(false)}
-                className="w-full py-2 text-gray-300 text-sm underline"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+          <button
+            onClick={handleJoinPage}
+            className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-lg transition"
+          >
+            Join Game
+          </button>
         </div>
       </div>
     </div>
