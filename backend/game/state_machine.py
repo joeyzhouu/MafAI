@@ -1,7 +1,7 @@
 from enum import Enum, auto
 import uuid
 import random, time
-from ai import generate_mafia_story, generate_background_story
+from .ai import generate_mafia_story, generate_background_story
 
 THEMES = [
     "Space Crew vs. Aliens: A spaceship floating in deep space...",
