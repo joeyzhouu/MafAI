@@ -32,6 +32,7 @@ def create_game():
 @game_bp.route("/join", methods=["POST"])
 def join_game():
     data = request.json or {}
+    print("Join request received:", data)
     game_id = data.get("game_id")
     name = data.get("name")
 
@@ -121,3 +122,21 @@ def player_action():
         return jsonify({"status": "recorded", "game_state": game.get_state()})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+@game_bp.route("/ready", methods=["POST"])
+def player_ready():
+    data = request.json or {}
+    game_id = data.get("game_id")
+    player_id = data.get("player_id")
+    ready_status = data.get("ready", True)
+
+    game = games.get(game_id)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+
+    player_info = game.players.get(player_id)
+    if not player_info:
+        return jsonify({"error": "Player not found"}), 404
+
+    player_info["player_obj"].set_ready(ready_status)
+    return jsonify({"status": "ok", "players": game._serializable_players()})
