@@ -7,6 +7,7 @@ THEMES = [
     "Space Crew vs. Aliens: A spaceship floating in deep space...",
     "Medieval Kingdom: Nobles secretly plotting to overthrow the king...",
     "Wild West: Bandits hiding among locals in a frontier town...",
+    "Haunted Village: Mass murderers manipulating and killing innocent villagers...",
 ]
 
 
@@ -238,34 +239,51 @@ class MafiaGame:
     # ------------------- Day Phase -------------------
 
     def start_day(self):
-        """Transitions to DAY phase and generates story."""
+        """Starts the DAY phase, generates AI story from night activities, and eliminates dead players."""
         if self.state != GameState.DAY:
-            raise Exception("Can only start DAY after resolving NIGHT")
+            raise Exception("Not in DAY phase")
 
-        # --- AI Story Generation ---
-        night_summary = [e for e in self.story_log if f"Night {self.round}" in e.get("event", "")]
-        prompt = (
-            f"You are the storyteller of a Mafia game. "
-            f"Here are last night’s events:\n{night_summary}\n\n"
-            f"Write a short narrative summary of what happened in town. "
-            f"Include one or two pieces of red herrings to mislead players."
-        )
+        # Collect night activities for AI story
+        night_activities = []
+        for pid, act in self.pending_actions.items():
+            player = self.players[pid]
+            if "activity" in act:
+                night_activities.append({
+                    "player": player["name"],
+                    "role": player["role"],
+                    "activity": act["activity"]
+                })
 
-        story = generate_story(prompt)
-        self.story_log.append({"event": f"Day {self.round} story", "story": story})
+        prompt = f"Night {self.round} activities:\n"
+        for act in night_activities:
+            prompt += f"{act['player']} ({act['role']}): {act['activity']}\n"
+        prompt += "Generate a story summarizing these events, including some twists and hints for discussion."
 
-        return {"story": story}
+        story_text = generate_story(prompt)
 
-    def record_vote(self, player_id, target_id):
-        """Record a vote from an alive player."""
-        player = self.players.get(player_id)
-        if not player or not player.alive:
-            raise ValueError("Dead players cannot vote")
+        # Save story in the story log
+        self.story_log.append({"event": f"Day {self.round} AI story", "story": story_text})
 
-        if target_id != "skip" and target_id not in self.players:
-            raise ValueError("Invalid vote target")
+        # Transition to discussion/voting phase
+        self.state = GameState.DISCUSSION
 
-        self.votes[player_id] = target_id
+        # Clear night actions for next round
+        self.pending_actions = {}
+
+        return {"story": story_text, "night_activities": night_activities}
+
+    def record_vote(self, voter_id, target_id):
+        """Records a vote. Only alive players can vote."""
+        if self.state != GameState.DISCUSSION:
+            raise Exception("Not in DISCUSSION phase")
+        if voter_id not in self.players or not self.players[voter_id]["alive"]:
+            raise Exception("Only alive players can vote")
+
+        if not hasattr(self, "votes"):
+            self.votes = {}
+
+        self.votes[voter_id] = target_id
+        return True
 
     def all_votes_received(self):
         """Check if all alive players have voted."""
@@ -273,45 +291,44 @@ class MafiaGame:
         return len(self.votes) == len(alive_players)
 
     def resolve_votes(self):
-        """Tally votes and eliminate player (or skip)."""
-        if not self.votes:
-            return {"msg": "No votes were cast", "eliminated": None}
+        """Counts votes and eliminates player if needed."""
+        if self.state != GameState.DISCUSSION:
+            raise Exception("Not in DISCUSSION phase")
+        if not hasattr(self, "votes"):
+            return {"message": "No votes cast"}
 
-        # Count votes
-        tally = {}
-        for target in self.votes.values():
-            tally[target] = tally.get(target, 0) + 1
+        vote_counts = {}
+        for v in self.votes.values():
+            vote_counts[v] = vote_counts.get(v, 0) + 1
 
-        # Find majority
-        max_votes = max(tally.values())
-        winners = [t for t, v in tally.items() if v == max_votes]
+        num_alive = len(self.alive_players())
+        majority = num_alive // 2 + 1
 
+        # Determine result
         eliminated = None
-        if len(winners) == 1:
-            chosen = winners[0]
-            if chosen == "skip":
-                eliminated = None
-                msg = "The village decided to skip elimination."
-            else:
-                eliminated = chosen
-                self.players[chosen].alive = False
-                msg = f"{self.players[chosen].name} was voted out!"
+        if "skip" in vote_counts and vote_counts["skip"] >= majority:
+            outcome = "skip_majority"
         else:
-            eliminated = None
-            msg = "Tie! No one was eliminated."
+            # Get player with most votes
+            top_votes = [pid for pid, cnt in vote_counts.items() if cnt == max(vote_counts.values())]
+            eliminated = random.choice(top_votes)
+            self.eliminate_player(eliminated)
+            outcome = "player_eliminated"
 
-        # Reset votes for next round
+        # Clear votes for next round
         self.votes = {}
+        self.state = GameState.NIGHT  # back to night
 
-        # Check win condition
-        game_over, winner = self.check_game_over()
+        # Check if game over
+        winners = self.is_game_over()
+        if winners:
+            self.end_game(winners)
 
         return {
-            "msg": msg,
+            "outcome": outcome,
             "eliminated": eliminated,
-            "tally": tally,
-            "game_over": game_over,
-            "winner": winner
+            "vote_counts": vote_counts,
+            "game_over": self.state == GameState.END
         }
 
 
