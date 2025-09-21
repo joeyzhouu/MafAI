@@ -58,6 +58,19 @@ export default function HostRoom() {
       setGameSettings(data.settings);
     });
 
+    s.on("game_started", (data) => {
+      console.log("Game started event received:", data);
+      // Navigate to narration component
+      navigate('/narration', {
+        state: {
+          gameId: id,
+          playerId: playerId,
+          name: name,
+          story: data.background_story,
+        }
+      });
+    });
+
     s.on("error", (error) => {
       console.error("Socket error:", error);
       alert(error.msg || "An error occurred");
