@@ -28,7 +28,7 @@ export default function Home() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+    <div className="flex h-screen items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
       <div className="w-full max-w-md p-8 bg-gray-900/60 rounded-2xl shadow-xl backdrop-blur text-center">
         <h1 className="text-5xl font-extrabold text-white mb-8 tracking-wide">
           mafAI
@@ -42,7 +42,6 @@ export default function Home() {
           className="w-full mb-6 p-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
         />
 
-        {/* Action buttons */}
         <div className="space-y-4">
           <button
             onClick={handleCreate}
@@ -51,7 +50,6 @@ export default function Home() {
             Create Game
           </button>
 
-          {/* Join game toggle */}
           {!joining ? (
             <button
               onClick={() => setJoining(true)}
