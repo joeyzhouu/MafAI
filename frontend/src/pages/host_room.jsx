@@ -139,8 +139,11 @@ export default function HostRoom() {
   };
 
   const playerCount = Object.keys(players).length;
+  const allReady = Object.values(players).every((p) => p.ready);
   const canStart =
-    playerCount >= 4 && gameSettings.mafia < Math.ceil(playerCount / 2);
+    playerCount >= 4 &&
+    gameSettings.mafia < Math.ceil(playerCount / 2) &&
+    allReady;
 
   const leaveGame = () => {
     if (!socket) return;
@@ -308,7 +311,11 @@ export default function HostRoom() {
             : "bg-gray-600 cursor-not-allowed"
         }`}
       >
-        {!canStart ? `Need ${4 - playerCount} more players` : "Start Game"}
+        {!allReady
+          ? "Waiting for players to ready up"
+          : !canStart
+          ? `Need ${4 - playerCount} more players`
+          : "Start Game"}
       </button>
     </div>
   );
