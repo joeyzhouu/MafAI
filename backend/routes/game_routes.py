@@ -61,7 +61,6 @@ def get_state(game_id):
         return jsonify({"error": "Game not found"}), 404
     return jsonify(game.get_state())
 
-
 @game_bp.route("/settings", methods=["POST"])
 def update_settings():
     data = request.json or {}

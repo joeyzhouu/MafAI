@@ -19,6 +19,7 @@ class GameState(Enum):
 
 class MafiaGame:
     def __init__(self, host_player, theme=None):
+        """Initializes a new Mafia game instance."""
         self.id = str(uuid.uuid4())[:6]
         self.state = GameState.LOBBY
         self.host_id = host_player.get_info()['player_id']
@@ -29,14 +30,20 @@ class MafiaGame:
         self.round = 0
 
         # default settings
-        self.settings = {"mafia": 1, "doctor": 1, "detective": 1}
-
+        self.settings = {
+            "theme": theme,
+            "day_duration": 120,  # seconds
+            "night_duration": 60,
+            "roles": {}       
+        }
+        
         self.pending_actions = {}
         self.detective_results = {}
 
         self.add_player(host_player)
 
     def add_player(self, player):
+        """Adds a player to the game lobby."""
         if self.state != GameState.LOBBY:
             raise Exception("Game already started")
         info = player.get_info()
@@ -48,6 +55,7 @@ class MafiaGame:
         }
 
     def _serializable_players(self):
+        """Returns a serializable version of players info for JSON responses."""
         return {
             pid: {
                 "name": info["name"],
@@ -58,6 +66,7 @@ class MafiaGame:
         }
 
     def get_state(self):
+        """Returns the current game state in a serializable format."""
         return {
             "id": self.id,
             "state": self.state.name,
@@ -72,6 +81,7 @@ class MafiaGame:
         }
 
     def update_settings(self, host_id, new_settings):
+        """Updates game settings if requested by the host and valid."""
         if host_id != self.host_id:
             raise Exception("Only host can change settings")
         if self.state != GameState.LOBBY:
@@ -85,11 +95,23 @@ class MafiaGame:
             raise Exception("Need at least 5 players for 2 mafia")
         if mafia_count == 3 and num_players < 7:
             raise Exception("Need at least 7 players for 3 mafia")
+        
+        if "theme" in new_settings:
+            theme = new_settings["theme"]
+
+        if "day_duration" in new_settings:
+            if not isinstance(new_settings["day_duration"], int) or new_settings["day_duration"] <= 0:
+                raise ValueError("day_duration must be a positive integer")
+        
+        if "night_duration" in new_settings:
+            if not isinstance(new_settings["night_duration"], int) or new_settings["night_duration"] <= 0:
+                raise ValueError("night_duration must be a positive integer")
 
         self.settings.update(new_settings)
         return self.settings
 
     def assign_roles(self):
+        """Randomly assigns roles to players based on current settings."""
         pids = list(self.players.keys())
         if len(pids) < 4:
             raise Exception("Not enough players to start (min 4)")
@@ -113,22 +135,27 @@ class MafiaGame:
         return self._serializable_players()
 
     def start_game(self):
+        """Starts the game if in lobby state and enough players."""
         self.assign_roles()
         self.start_night()
 
     def alive_players(self):
+        """Returns a list of player IDs who are currently alive."""
         return [pid for pid, info in self.players.items() if info["alive"]]
 
     def alive_by_role(self, role):
+        """Returns a list of alive player IDs with the specified role."""
         return [pid for pid, info in self.players.items() if info["alive"] and info["role"] == role]
 
     def start_night(self):
+        """Transitions the game to the NIGHT phase."""
         self.state = GameState.NIGHT
         self.round += 1
         self.pending_actions = {}
         self.story_log.append({"event": f"Night {self.round} begins."})
 
     def record_action(self, player_id, action):
+        """Records a player's night action."""
         if self.state != GameState.NIGHT:
             raise Exception("Not in NIGHT phase")
         if player_id not in self.players or not self.players[player_id]["alive"]:
@@ -153,10 +180,12 @@ class MafiaGame:
         return True
 
     def all_night_actions_received(self):
+        """Checks if all required night actions have been received."""
         needed = {pid for role in ("mafia", "doctor", "detective") for pid in self.alive_by_role(role)}
         return needed.issubset(self.pending_actions.keys())
 
     def resolve_night(self):
+        """Resolves all night actions and transitions to DAY phase."""
         if self.state != GameState.NIGHT:
             raise Exception("Can only resolve during NIGHT")
 
@@ -202,12 +231,14 @@ class MafiaGame:
         return {"mafia_target": mafia_target, "saved": saved, "detective_results": self.detective_results}
 
     def eliminate_player(self, player_id):
+        """Eliminates a player from the game (used for voting and killer)."""
         if player_id in self.players:
             self.players[player_id]["player_obj"].eliminate()
             self.players[player_id]["alive"] = False
             self.story_log.append({"event": f"Player Eliminated: {self.players[player_id]['name']}", "player_id": player_id})
 
     def is_game_over(self):
+        """Checks if the game is over and returns the winning side if so."""
         alive = [info for info in self.players.values() if info["alive"]]
         mafia = [p for p in alive if p["role"] == "mafia"]
         villagers = [p for p in alive if p["role"] != "mafia"]
@@ -219,5 +250,8 @@ class MafiaGame:
         return None
 
     def end_game(self, winners):
+        """Ends the game and records the winners."""
+        if self.is_game_over() is None:
+            raise Exception("Game is not over yet")
         self.state = GameState.END
         self.story_log.append({"event": "Game Over", "winners": winners})
