@@ -1,7 +1,7 @@
 from enum import Enum, auto
 import uuid
 import random, time
-from .ai import generate_mafia_story, generate_background_story
+from .ai import generate_mafia_story, generate_background_story, generate_vote_results
 
 THEMES = [
     "Space Crew vs. Aliens: A spaceship floating in deep space...",
@@ -300,6 +300,7 @@ class MafiaGame:
 
         # Generate story
         story_text = generate_mafia_story(night_actions, special_actions, self.round, self.theme)
+        print(story_text[:10])
 
         # Save story in log
         self.story_log.append({
@@ -332,13 +333,16 @@ class MafiaGame:
         alive_count = len(self.alive_players())
         return len(self.votes) == alive_count
 
+    from .ai import generate_vote_results
+
     def resolve_votes(self):
-        """Counts votes and eliminates player if needed."""
+        """Counts votes, applies elimination, and generates AI narration."""
         if self.state != GameState.DISCUSSION:
             raise Exception("Not in DISCUSSION phase")
         if not hasattr(self, "votes") or not self.votes:
             return {"message": "No votes cast"}
 
+        # Count votes
         vote_counts = {}
         for v in self.votes.values():
             vote_counts[v] = vote_counts.get(v, 0) + 1
@@ -346,23 +350,61 @@ class MafiaGame:
         num_alive = len(self.alive_players())
         majority = num_alive // 2 + 1
 
-        # Determine result
         eliminated = None
+        outcome = "no_elimination"
+
+        # Check if skip had majority
         if "skip" in vote_counts and vote_counts["skip"] >= majority:
-            outcome = "skip_majority"
+            outcome = "no_elimination"
         else:
-            # Get player with most votes
+            # Find top-voted player(s)
             top_votes = [pid for pid, cnt in vote_counts.items() if cnt == max(vote_counts.values())]
-            eliminated = random.choice(top_votes)
-            self.eliminate_player(eliminated)
-            outcome = "player_eliminated"
 
-        # Clear votes for next round
+            if top_votes:
+                eliminated = random.choice(top_votes)
+                self.eliminate_player(eliminated)
+                outcome = "player_eliminated"
+
+        # Build vote_summary for AI
+        vote_summary = {
+            "outcome": outcome,
+            "eliminated": eliminated,
+            "votes": self.votes.copy(),
+            "game_over": False  # will update after check_game_over
+        }
+
+        # Generate AI narration
+        try:
+            narration = generate_vote_results(
+                vote_summary,
+                self.players,
+                self.round_number,
+                self.theme
+            )
+        except Exception:
+            # Fallback narration in case AI call fails
+            if outcome == "player_eliminated" and eliminated:
+                eliminated_name = self.players[eliminated]["name"]
+                narration = f"The town voted, and {eliminated_name} was eliminated."
+            else:
+                narration = "The town voted, but no one was eliminated."
+
+        # Save narration in story log
+        self.story_log.append({
+            "event": "Vote Results",
+            "story": narration,
+            "outcome": outcome,
+            "eliminated": eliminated,
+            "votes": self.votes.copy()
+        })
+
+        # Reset votes & advance state
         self.votes = {}
-        self.state = GameState.NIGHT  # back to night
+        self.state = GameState.NIGHT
 
-        # Check if game over
+        # Check game over
         game_over, winners = self.check_game_over()
+        vote_summary["game_over"] = game_over
         if game_over:
             self.end_game()
 
@@ -370,8 +412,10 @@ class MafiaGame:
             "outcome": outcome,
             "eliminated": eliminated,
             "vote_counts": vote_counts,
+            "story": narration,
             "game_over": self.state == GameState.END
         }
+
 
     def eliminate_player(self, player_id):
         """Eliminates a player from the game (used for voting and killer)."""

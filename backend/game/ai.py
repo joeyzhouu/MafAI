@@ -108,6 +108,69 @@ def generate_mafia_story(night_actions: dict, special_actions: dict, round_numbe
 
     return response.text.strip()
 
+def generate_vote_results(vote_summary: dict, players: dict, round_number: int, theme: str = None):
+    """
+    Generate a narrative summary of the daytime voting results.
+
+    Args:
+        vote_summary: Dict containing voting outcome from resolve_votes(), e.g.
+            {
+                "outcome": "player_eliminated" or "no_elimination",
+                "eliminated": "player_id" or None,
+                "votes": {"Alice": "Bob", "Charlie": "Bob", "David": "skip"},
+                "game_over": bool
+            }
+        players: Dict of player_id -> {"name": str, "role": str, "alive": bool}
+        round_number: Current round number
+        theme: Optional theme for story flavor
+
+    Returns:
+        str: Generated story text
+    """
+    theme_text = f"Theme: {theme}.\n" if theme else ""
+
+    # Format vote data into readable text
+    votes_cast = []
+    for voter, target in vote_summary.get("votes", {}).items():
+        voter_name = players[voter]["name"] if voter in players else voter
+        if target == "skip":
+            votes_cast.append(f"{voter_name} chose to skip voting")
+        else:
+            target_name = players[target]["name"] if target in players else target
+            votes_cast.append(f"{voter_name} voted against {target_name}")
+    votes_text = "\n".join(f"- {line}" for line in votes_cast)
+
+    eliminated_name = None
+    if vote_summary.get("outcome") == "player_eliminated":
+        eliminated_id = vote_summary.get("eliminated")
+        eliminated_name = players[eliminated_id]["name"] if eliminated_id in players else "Unknown"
+
+    prompt = f"""
+        You are narrating the Mafia game's daytime events.
+        {theme_text}
+        It was Day {round_number}. The town gathered to vote.
+        Voting summary:
+        {votes_text}
+        Outcome: {"No elimination" if not eliminated_name else f"{eliminated_name} was voted out"}.
+
+        Write a short narrative that:
+        - Describe the voting outcome very briefly and don't add extra, unnecessary details
+        - Does NOT mention any player roles
+        - Only mention names of players who were eliminated (if any) but do not mention their roles at all 
+        - Keep it concise and suspenseful, no more than 3 sentences
+        - Keep vocabulary simple, avoid excessive adjectives
+    """
+
+    response = model.generate_content(
+        prompt,
+        generation_config={
+            "temperature": 0.7,
+            "top_p": 0.9
+        }
+    )
+
+    return response.text.strip()
+
 
 # if __name__ == "__main__":
 #     night_actions = {
