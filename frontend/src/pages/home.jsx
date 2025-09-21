@@ -8,12 +8,20 @@ export default function Home() {
 
   const handleCreate = async () => {
     if (!name.trim()) return alert("Please enter a name");
-    const res = await createGame(name);
-    const gameId = res.data.game_id;
-    const hostId = res.data.host_id;
-    navigate(`/room/${gameId}`, {
-      state: { name, playerId: hostId, isHost: true },
-    });
+
+    try {
+      const res = await createGame(name);
+      const gameId = res.data.game_id;
+      const hostId = res.data.host_id;
+
+      // Navigate to HOST room instead of regular room
+      navigate(`/host/${gameId}`, {
+        state: { name, playerId: hostId, isHost: true },
+      });
+    } catch (error) {
+      console.error("Failed to create game:", error);
+      alert("Failed to create game. Please try again.");
+    }
   };
 
   const handleJoinPage = () => {

@@ -33,10 +33,12 @@ class MafiaGame:
 
         # default settings
         self.settings = {
-            "theme": theme,
-            "day_duration": 120,  # seconds
-            "night_duration": 60,
-            "roles": {}       
+            "theme": self.theme,
+            "mafia": 1, 
+            "doctor": 1, 
+            "detective": 1,
+            "day_duration": 120,
+            "night_duration": 60
         }
         
         self.pending_actions = {}
@@ -86,13 +88,12 @@ class MafiaGame:
         }
 
     def update_settings(self, host_id, new_settings):
-        """Updates game settings if requested by the host and valid."""
         if host_id != self.host_id:
             raise Exception("Only host can change settings")
         if self.state != GameState.LOBBY:
-            raise Exception("Settings can only be changed in the lobby")
+            raise Exception(f"Settings can only be changed in the lobby. Current state: {self.state}")
 
-        mafia_count = new_settings.get("mafia", self.settings["mafia"])
+        mafia_count = new_settings.get("mafia", self.settings.get("mafia", 1))
         num_players = len(self.players)
         if mafia_count > 3:
             raise Exception("Max mafia is 3")
@@ -160,6 +161,28 @@ class MafiaGame:
     def alive_by_role(self, role):
         """Returns a list of alive player IDs with the specified role."""
         return [pid for pid, info in self.players.items() if info["alive"] and info["role"] == role]
+    
+    def remove_player(self, player_id):
+        """Removes a player from the game (only allowed in LOBBY state)."""
+        if self.state != GameState.LOBBY:
+            raise Exception("Players can only leave during lobby phase")
+        
+        if player_id in self.players:
+            player_name = self.players[player_id]["name"]
+            del self.players[player_id]
+            self.story_log.append({"event": f"{player_name} left the game"})
+            
+            # If the host leaves, transfer host to another player or end game
+            if player_id == self.host_id and self.players:
+                new_host_id = next(iter(self.players.keys()))
+                self.host_id = new_host_id
+                self.story_log.append({"event": f"{self.players[new_host_id]['name']} is now the host"})
+            elif player_id == self.host_id:
+                # No players left, game should be cleaned up
+                pass
+                
+            return True
+        return False
     
     # ------------------- Night Phase -------------------
 
