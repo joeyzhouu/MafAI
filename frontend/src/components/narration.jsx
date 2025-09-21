@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
+import LoadingScreen from "./loading_screen";
 
 export default function Narration() {
   const location = useLocation();
@@ -10,6 +11,9 @@ export default function Narration() {
 
   const [story, setStory] = useState(initialStory || "");
   const [storyType, setStoryType] = useState("story");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [currentRound, setCurrentRound] = useState(1);
 
   const [displayedText, setDisplayedText] = useState("");
   const [allGeneratedText, setAllGeneratedText] = useState("");
@@ -35,6 +39,33 @@ export default function Narration() {
     }
   };
 
+  // Add loading simulation effect
+  useEffect(() => {
+    if (story) {
+      let progress = 0;
+      const loadingInterval = setInterval(() => {
+        progress += 0.1;
+        setLoadingProgress(progress);
+
+        if (progress >= 1) {
+          clearInterval(loadingInterval);
+          setTimeout(() => {
+            setIsLoading(false);
+          }, 500);
+        }
+      }, 100);
+
+      return () => clearInterval(loadingInterval);
+    }
+  }, [story]);
+
+  // Add function to determine loading type
+  const getLoadingType = () => {
+    if (storyType === "background") return "sunrise";
+    if (storyType === "day") return "sunrise";
+    return "nightfall";
+  };
+
   // Socket connection
   useEffect(() => {
     if (!gameId || !playerId) {
@@ -47,42 +78,66 @@ export default function Narration() {
 
     s.emit("join", { game_id: gameId, player_id: playerId });
 
+    // Handle background story (game start)
     s.on("game_started", (data) => {
       if (data.background_story) {
         setStory(data.background_story);
         setStoryType("background");
+        setCurrentRound(1); // Game just started
+        setIsLoading(true);
+        setLoadingProgress(0);
       }
     });
 
+    // Handle day story (after night phase)
     s.on("day_started", (data) => {
       if (data.story) {
         setStory(data.story);
         setStoryType("day");
+        setIsLoading(true);
+        setLoadingProgress(0);
+
+        // Get round from game state
+        if (data.game_state && data.game_state.round) {
+          setCurrentRound(data.game_state.round);
+        }
       }
     });
 
     s.on("player_continue_update", (data) => {
       console.log("Player continue update:", data);
-      // Optionally show a list of players who have continued
     });
 
-    s.on("all_players_continued", () => {
-      // Navigate to next page once all players pressed continue
-      if (storyType === "background") {
+    s.on("all_players_continued", (data) => {
+      console.log("All players continued:", data);
+
+      if (data.next_phase === "night") {
         navigate("/night-phase", { state: { gameId, playerId, name } });
-      } else if (storyType === "day") {
+      } else if (data.next_phase === "discussion") {
         navigate("/discussion-phase", { state: { gameId, playerId, name } });
       } else {
-        navigate("/");
+        // Fallback based on story type
+        if (storyType === "background") {
+          navigate("/night-phase", { state: { gameId, playerId, name } });
+        } else if (storyType === "day") {
+          navigate("/discussion-phase", { state: { gameId, playerId, name } });
+        } else {
+          navigate("/");
+        }
       }
+    });
+
+    s.on("error", (error) => {
+      console.error("Socket error:", error);
+      alert(error.msg || "An error occurred");
     });
 
     return () => s.disconnect();
   }, [gameId, playerId, navigate, storyType, name]);
 
-  // Split story into sentences
+  // Split story into sentences (only when not loading)
   useEffect(() => {
-    if (story) {
+    if (story && !isLoading) {
       const parts = story
         .split(".")
         .map((s) => s.trim())
@@ -95,7 +150,7 @@ export default function Narration() {
       setIsTyping(false);
       setHasContinued(false);
     }
-  }, [story]);
+  }, [story, isLoading]);
 
   useEffect(() => {
     if (!isUserScrolling && textBoxRef.current) {
@@ -128,9 +183,13 @@ export default function Narration() {
     return () => clearInterval(frameInterval);
   }, [isTyping, animationDirection]);
 
-  // Typing effect
+  // Typing effect (only when not loading)
   useEffect(() => {
-    if (sentences.length === 0 || currentIndex >= sentences.length) {
+    if (
+      isLoading ||
+      sentences.length === 0 ||
+      currentIndex >= sentences.length
+    ) {
       setIsTyping(false);
       setShowCompleteText(true);
       return;
@@ -162,7 +221,7 @@ export default function Narration() {
     }, 50);
 
     return () => clearInterval(interval);
-  }, [currentIndex, sentences]);
+  }, [currentIndex, sentences, isLoading]);
 
   // Continue button handler
   const handleContinue = () => {
@@ -172,6 +231,12 @@ export default function Narration() {
     }
   };
 
+  // Show loading screen while story is being prepared
+  if (isLoading && story) {
+    return <LoadingScreen type={getLoadingType()} progress={loadingProgress} />;
+  }
+
+  // Show waiting state if no story yet
   if (!story) {
     return (
       <div className="flex flex-col h-screen items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 text-white">
@@ -182,16 +247,32 @@ export default function Narration() {
     );
   }
 
+  // Determine display title based on story type
+  const getStoryTitle = () => {
+    if (storyType === "background") return "Game Start";
+    if (storyType === "day") return `Day ${currentRound}`;
+    return "Story";
+  };
+
   return (
     <div className="flex flex-col h-screen items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 text-white">
       <div className="absolute top-6 left-6 text-white text-lg">
         Game: {gameId} | Player: {name}
       </div>
       <div className="absolute top-6 right-6 text-white text-lg capitalize">
-        {storyType} Story
+        {getStoryTitle()} Story
       </div>
 
-      <div className="relative mb-8">
+      {/* Day Counter Badge for Day stories */}
+      {storyType === "day" && (
+        <div className="absolute top-16 left-1/2 transform -translate-x-1/2">
+          <div className="bg-blue-500/80 rounded-full px-4 py-2 text-white font-bold">
+            Day {currentRound}
+          </div>
+        </div>
+      )}
+
+      <div className="relative mb-8 mt-8">
         <div
           className="w-16 h-16 overflow-hidden"
           style={{
@@ -200,8 +281,6 @@ export default function Narration() {
             backgroundPosition: `-${currentFrame * frameWidth}px 0px`,
             backgroundRepeat: "no-repeat",
             imageRendering: "pixelated",
-            imageRendering: "-moz-crisp-edges",
-            imageRendering: "crisp-edges",
           }}
         />
       </div>

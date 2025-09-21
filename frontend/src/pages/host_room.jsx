@@ -61,13 +61,13 @@ export default function HostRoom() {
     s.on("game_started", (data) => {
       console.log("Game started event received:", data);
       // Navigate to narration component
-      navigate('/narration', {
+      navigate("/narration", {
         state: {
           gameId: id,
           playerId: playerId,
           name: name,
           story: data.background_story,
-        }
+        },
       });
     });
 
@@ -103,7 +103,12 @@ export default function HostRoom() {
   const updateSettings = (newSettings) => {
     if (!socket) return;
 
-    const updatedSettings = { ...gameSettings, ...newSettings };
+    const updatedSettings = {
+      ...gameSettings,
+      ...newSettings,
+      doctor: 1,
+      detective: 1,
+    };
     setGameSettings(updatedSettings);
 
     socket.emit("update_settings", {
