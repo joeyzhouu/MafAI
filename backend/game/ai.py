@@ -33,6 +33,7 @@ def generate_background_story(theme: str):
             "top_p": 0.9
         }
     )
+    print(response.text.strip()[:20])
     return response.text.strip()
 
 

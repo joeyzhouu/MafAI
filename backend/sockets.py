@@ -6,6 +6,7 @@ from routes.game_routes import games  # in-memory game store
 # socketio will be injected from app.py
 socketio = None
 player_sessions = {}
+players_continued = {}  # {game_id: set(player_id)}
 
 def init_socketio(sio):
     global socketio
@@ -100,21 +101,53 @@ def init_socketio(sio):
             players_roles = game.assign_roles()
             emit("role_assigned", {"players": players_roles}, room=game_id)
 
+            print(f"Generating background story for game {game_id}...") 
+
             # Run state machine start_game (generates background story)
             result = game.start_game()
-            background = result.get("background_story")
+            story = result["background_story"]
+
+            print(f"Background story generated: {story[:10]}...")
 
             # Switch to night phase
             game.start_night()
 
             # Broadcast game started + background story + state
             emit("game_started", {
-                "background_story": background,
+                "background_story": story,
                 "game_state": game.get_state()
             }, room=game_id)
 
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
+
+    @socketio.on("player_continue")
+    def handle_player_continue(data):
+        game_id = data.get("game_id")
+        player_id = data.get("player_id")
+
+        if game_id not in games:
+            emit("error", {"msg": "Game not found"})
+            return
+
+        if game_id not in players_continued:
+            players_continued[game_id] = set()
+
+        players_continued[game_id].add(player_id)
+
+        # Notify everyone of updated continue status
+        emit("player_continue_update", {
+            "player_id": player_id,
+            "players_continued": list(players_continued[game_id])
+        }, room=game_id)
+
+        # Check if all players have continued
+        game = games[game_id]
+        all_player_ids = set(game.players.keys())
+        if players_continued[game_id] >= all_player_ids:
+            emit("all_players_continued", {}, room=game_id)
+            # Reset for next continue phase
+            players_continued[game_id] = set()
 
     # ------------------- Player Night Action -------------------
     @socketio.on("player_action")
