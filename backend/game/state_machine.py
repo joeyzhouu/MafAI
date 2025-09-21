@@ -94,13 +94,8 @@ class MafiaGame:
             raise Exception(f"Settings can only be changed in the lobby. Current state: {self.state}")
 
         mafia_count = new_settings.get("mafia", self.settings.get("mafia", 1))
-        num_players = len(self.players)
-        if mafia_count > 3:
-            raise Exception("Max mafia is 3")
-        if mafia_count == 2 and num_players < 5:
-            raise Exception("Need at least 5 players for 2 mafia")
-        if mafia_count == 3 and num_players < 7:
-            raise Exception("Need at least 7 players for 3 mafia")
+        if not isinstance(mafia_count, int) or mafia_count < 1 or mafia_count >= len(self.players) / 2:
+            raise ValueError("Invalid number of mafia")
         
         if "theme" in new_settings:
             theme = new_settings["theme"]
