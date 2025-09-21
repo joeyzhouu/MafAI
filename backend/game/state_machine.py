@@ -1,7 +1,7 @@
 from enum import Enum, auto
 import uuid
 import random, time
-from ai import generate_story
+from ai import generate_mafia_story, generate_background_story
 
 THEMES = [
     "Space Crew vs. Aliens: A spaceship floating in deep space...",
@@ -140,9 +140,18 @@ class MafiaGame:
         return self._serializable_players()
 
     def start_game(self):
-        """Starts the game if in lobby state and enough players."""
-        self.assign_roles()
-        self.start_night()
+        if self.state != GameState.WAITING:
+            raise Exception("Game already started")
+
+        self.state = GameState.NIGHT
+        self.round = 1
+
+        # Generate intro narrative
+        background = generate_background_story(self.theme)
+        self.story_log.append({"event": "Game Start", "story": background})
+
+        return {"background_story": background}
+
 
     def alive_players(self):
         """Returns a list of player IDs who are currently alive."""
@@ -183,7 +192,12 @@ class MafiaGame:
         if target not in self.players:
             raise Exception("Invalid action target")
 
-        self.pending_actions[player_id] = {"type": atype, "target": target}
+        self.pending_actions[player_id] = {
+                                            "type": atype,
+                                            "target": target,
+                                            "activity": action.get("activity", "")
+                                        }
+
         return True
 
     def all_night_actions_received(self):
@@ -240,38 +254,39 @@ class MafiaGame:
     # ------------------- Day Phase -------------------
 
     def start_day(self):
-        """Starts the DAY phase, generates AI story from night activities, and eliminates dead players."""
         if self.state != GameState.DAY:
             raise Exception("Not in DAY phase")
 
-        # Collect night activities for AI story
-        night_activities = []
+        # Build night actions dict
+        night_actions = {}
         for pid, act in self.pending_actions.items():
             player = self.players[pid]
-            if "activity" in act:
-                night_activities.append({
-                    "player": player["name"],
-                    "role": player["role"],
-                    "activity": act["activity"]
-                })
+            night_actions[player["name"]] = {
+                "role": player["role"],
+                "action": act.get("activity", "")
+            }
 
-        prompt = f"Night {self.round} activities:\n"
-        for act in night_activities:
-            prompt += f"{act['player']} ({act['role']}): {act['activity']}\n"
-        prompt += "Generate a story summarizing these events, including some twists and hints for discussion."
+        # Build special actions
+        special_actions = {"deaths": [], "revivals": []}
+        for pid, info in self.players.items():
+            if not info["alive"] and "eliminated_in_round" in info and info["eliminated_in_round"] == self.round:
+                special_actions["deaths"].append(info["name"])
+            # (If you add revival logic later, populate special_actions["revivals"])
 
-        story_text = generate_story(prompt)
+        # Generate story
+        story_text = generate_mafia_story(night_actions, special_actions, self.round, self.theme)
 
-        # Save story in the story log
-        self.story_log.append({"event": f"Day {self.round} AI story", "story": story_text})
+        # Save story in log
+        self.story_log.append({
+            "event": f"Day {self.round} AI story",
+            "story": story_text
+        })
 
-        # Transition to discussion/voting phase
         self.state = GameState.DISCUSSION
-
-        # Clear night actions for next round
         self.pending_actions = {}
 
-        return {"story": story_text, "night_activities": night_activities}
+        return {"story": story_text, "night_activities": night_actions}
+
 
     def record_vote(self, voter_id, target_id):
         """Records a vote. Only alive players can vote."""

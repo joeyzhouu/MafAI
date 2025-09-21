@@ -42,7 +42,18 @@ def generate_mafia_story(night_actions: dict, special_actions: dict, round_numbe
 
     Args:
         night_actions: Dict of player_name -> {"role": str, "action": str}
-        special_actions: Dict containing lists of player names for 'deaths' and 'revivals'.
+            i.e.{
+                    "Alice": {"role": "villager", "action": "Visited the well alone."},
+                    "Bob": {"role": "detective", "action": "Searched the forest for clues."},
+                    "Charlie": {"role": "doctor", "action": "Stayed in his house to protect villagers."},
+                    "David": {"role": "mafia", "action": "Worked the bakery night shift."},
+                    "Eve": {"role": "villager", "action": "Took a walk at the beach to calm anxiety."}
+                }
+        special_actions: Dict containing lists of descriptions for 'deaths' and 'revivals'.
+            i.e. {
+                    "deaths": ["David killed Eve"],
+                    "revivals": ["Charlie revived Eve"]
+                }
         round_number: Current round number
         theme: Optional theme for story flavor
 
