@@ -104,27 +104,32 @@ def player_action():
     data = request.json or {}
     game_id = data.get("game_id")
     player_id = data.get("player_id")
-    action = data.get("action")  # {"type": "kill", "target": "<pid>"}
+    action = data.get("action")  # {"type": "kill", "target": "<pid>", "activity": "<text>"}
 
     game = games.get(game_id)
     if not game:
         return jsonify({"error": "Game not found"}), 404
 
-    # Only allow alive players to perform night actions
+    # Only alive players can perform night actions
     player_info = game.players.get(player_id)
     if not player_info or not player_info["alive"]:
         return jsonify({"error": "Only alive players can perform night actions"}), 403
 
     try:
-        game.record_action(player_id, action)
+        game.record_action(player_id, action)  # now stores activity text
 
         if game.all_night_actions_received():
-            result = game.resolve_night()
-            return jsonify({"status": "resolved", "result": result, "game_state": game.get_state()})
+            result = game.resolve_night()  # resolves night, includes collected activities
+            return jsonify({
+                "status": "resolved",
+                "result": result,
+                "game_state": game.get_state()
+            })
 
         return jsonify({"status": "recorded", "game_state": game.get_state()})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
 
 @game_bp.route("/day/<game_id>", methods=["GET"])
 def start_day(game_id):
