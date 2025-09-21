@@ -3,33 +3,58 @@ from flask import request
 from game.state_machine import MafiaGame, GameState
 from routes.game_routes import games  # in-memory game store
 
-# socketio will be injected from app.py
 socketio = None  
 
 def init_socketio(sio):
     global socketio
     socketio = sio
 
-    # ------------------- Join Game -------------------
     @socketio.on("join")
     def handle_join(data):
+        print("Join event received:", data)
         game_id = data.get("game_id")
         player_id = data.get("player_id")
+        print(f"{player_id} joining room {game_id}")
 
         if game_id not in games:
             emit("error", {"msg": "Game not found"})
             return
 
         join_room(game_id)
+        print(f"Rooms: {socketio.server.manager.rooms}")
         game = games[game_id]
 
         emit("state_update", {
             "msg": f"{player_id} joined game {game_id}",
-            "players": game._serializable_players(),
+            "players": [
+                {**v, "player_id": k} for k, v in game._serializable_players().items()
+            ],
             "state": game.get_state()
         }, room=game_id)
 
-    # ------------------- Update Settings -------------------
+    @socketio.on("player_ready")
+    def handle_ready(data):
+        print("Ready event received:", data)
+        game_id = data.get("game_id")
+        player_id = data.get("player_id")
+        ready_status = data.get("ready", True)
+
+        game = games.get(game_id)
+        if not game:
+            emit("error", {"msg": "Game not found"})
+            return
+
+        player_info = game.players.get(player_id)
+        if player_info:
+            player_info["player_obj"].set_ready(ready_status)
+
+        emit("state_update", {
+            "players": [
+                {**v, "player_id": k} for k, v in game._serializable_players().items()
+            ],
+            "msg": f"{player_id} ready: {ready_status}"
+        }, room=game_id)
+
     @socketio.on("update_settings")
     def handle_update_settings(data):
         game_id = data.get("game_id")
@@ -47,7 +72,6 @@ def init_socketio(sio):
         except Exception as e:
             emit("error", {"msg": str(e)})
 
-    # ------------------- Start Game -------------------
     @socketio.on("start_game")
     def handle_start_game(data):
         game_id = data.get("game_id")
@@ -67,18 +91,16 @@ def init_socketio(sio):
             players_roles = game.assign_roles()
             emit("role_assigned", {"players": players_roles}, room=game_id)
 
-            # Immediately start night 1
             game.start_night()
             emit("game_started", {"game_state": game.get_state()}, room=game_id)
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
 
-    # ------------------- Player Night Action -------------------
     @socketio.on("player_action")
     def handle_action(data):
         game_id = data.get("game_id")
         player_id = data.get("player_id")
-        action = data.get("action")  # {"type": "...", "target": "<pid>", "activity": "..."}
+        action = data.get("action")
 
         if game_id not in games:
             emit("error", {"msg": "Game not found"})
@@ -110,8 +132,6 @@ def init_socketio(sio):
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
 
-
-    # ------------------- Player Voting -------------------
     @socketio.on("cast_vote")
     def handle_vote(data):
         game_id = data.get("game_id")
@@ -132,6 +152,7 @@ def init_socketio(sio):
     @socketio.on("resolve_votes")
     def handle_resolve_votes(data):
         game_id = data.get("game_id")
+        
         game = games.get(game_id)
         if not game:
             emit("error", {"msg": "Game not found"})
@@ -142,4 +163,3 @@ def init_socketio(sio):
             emit("votes_resolved", {"result": result, "game_state": game.get_state()}, room=game_id)
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
-

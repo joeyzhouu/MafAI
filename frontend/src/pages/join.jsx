@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { joinGame } from "../api/client";
-import { v4 as uuidv4 } from "uuid";
 
 export default function Join() {
   const navigate = useNavigate();
@@ -12,9 +11,22 @@ export default function Join() {
   const handleJoin = async () => {
     if (!name) return alert("Please go back and enter your name first.");
     if (!gameCode.trim()) return alert("Enter a game code");
-    const playerId = uuidv4();
-    await joinGame(gameCode, playerId, name);
-    navigate(`/room/${gameCode}`, { state: { name, playerId } });
+
+    try {
+      const response = await joinGame(gameCode, name);
+      const { player_id } = response.data; // Get the actual player_id from backend
+
+      navigate(`/room/${gameCode}`, {
+        state: {
+          name,
+          playerId: player_id, // Use the backend-generated player_id
+          isHost: false,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to join game:", error);
+      alert("Failed to join game. Please check the game code and try again.");
+    }
   };
 
   return (

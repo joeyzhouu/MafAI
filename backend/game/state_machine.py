@@ -64,7 +64,8 @@ class MafiaGame:
             pid: {
                 "name": info["name"],
                 "role": info["role"],    # frontend should hide role from non-owners
-                "alive": info["alive"]
+                "alive": info["alive"],
+                "ready": info["player_obj"].ready
             }
             for pid, info in self.players.items()
         }

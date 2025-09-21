@@ -7,6 +7,7 @@ class Player:
         self.name = name
         self.role = None
         self.is_alive = True
+        self.ready = False
 
     def get_info(self):
         """Return player information."""
@@ -14,7 +15,8 @@ class Player:
             "player_id": self.player_id,
             "name": self.name,
             "role": self.role,
-            "is_alive": self.is_alive
+            "is_alive": self.is_alive,
+            "ready": self.ready
         }
 
     def assign_role(self, role):
@@ -28,5 +30,7 @@ class Player:
     def revive(self):
         """Revive the player."""
         self.is_alive = True
-    
+
+    def set_ready(self, ready=True):
+        self.ready = ready
    
