@@ -93,8 +93,12 @@ def start_game():
         return jsonify({"error": "Only host can start"}), 403
 
     try:
-        game.start_game()
-        return jsonify({"status": "started", "game_state": game.get_state()})
+        result = game.start_game()
+        return jsonify({
+            "status": "ok",
+            "result": result,  # includes background_story now
+            "game_state": game.get_state()
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
