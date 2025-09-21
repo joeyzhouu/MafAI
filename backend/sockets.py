@@ -37,7 +37,7 @@ def init_socketio(sio):
             "state": game.get_state()
         }, room=game_id)
 
-    # ------------------- Player Ready Status (Your feature) -------------------
+    # ------------------- Player Ready Status -------------------
     @socketio.on("player_ready")
     def handle_ready(data):
         print("Ready event received:", data)
@@ -121,6 +121,7 @@ def init_socketio(sio):
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
 
+    # ------------------- Player Continue Logic -------------------
     @socketio.on("player_continue")
     def handle_player_continue(data):
         game_id = data.get("game_id")
@@ -141,11 +142,29 @@ def init_socketio(sio):
             "players_continued": list(players_continued[game_id])
         }, room=game_id)
 
-        # Check if all players have continued
+        # Check if all alive players have continued
         game = games[game_id]
-        all_player_ids = set(game.players.keys())
-        if players_continued[game_id] >= all_player_ids:
-            emit("all_players_continued", {}, room=game_id)
+        alive_player_ids = set(pid for pid, info in game.players.items() if info["alive"])
+        
+        if players_continued[game_id] >= alive_player_ids:
+            current_state = game.state
+            print(f"All players continued. Current game state: {current_state}")
+            
+            # Determine next phase based on current state
+            if current_state == GameState.NIGHT:
+                emit("all_players_continued", {
+                    "next_phase": "night"
+                }, room=game_id)
+            elif current_state == GameState.DAY:
+                emit("all_players_continued", {
+                    "next_phase": "discussion"
+                }, room=game_id)
+            else:
+                # Fallback
+                emit("all_players_continued", {
+                    "next_phase": "night"
+                }, room=game_id)
+            
             # Reset for next continue phase
             players_continued[game_id] = set()
 
@@ -165,24 +184,29 @@ def init_socketio(sio):
         try:
             game.record_action(player_id, action)
             emit("state_update", {
-                "msg": f"Action recorded: {action}",
+                "msg": f"Action recorded for {player_id}",
                 "state": game.get_state()
             }, room=game_id)
 
-            # Resolve night if all required actions received
+            # Check if all required night actions received
             if game.all_night_actions_received():
+                print(f"All night actions received for game {game_id}, resolving...")
+                
+                # Resolve night phase
                 result = game.resolve_night()
                 emit("night_resolved", {
-                    "result": result,  # includes night_activities
+                    "result": result,
                     "game_state": game.get_state()
                 }, room=game_id)
 
-                # Optionally start day immediately
+                # Generate and emit day story
                 day_info = game.start_day()
+                print(f"Story preview: {day_info["story"][:10]}")
                 emit("day_started", {
                     "story": day_info["story"],
                     "game_state": game.get_state()
                 }, room=game_id)
+                
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
 
@@ -247,6 +271,9 @@ def init_socketio(sio):
                 # If no players left, clean up the game
                 if not game.players:
                     del games[game_id]
+                    # Clean up continue tracking
+                    if game_id in players_continued:
+                        del players_continued[game_id]
                     emit("game_ended", {"msg": "Game ended - no players remaining"}, room=game_id)
                     return
                 

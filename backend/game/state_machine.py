@@ -13,11 +13,10 @@ THEMES = [
 
 class GameState(Enum):
     LOBBY = auto()
-    WAITING = auto()
     ROLE_ASSIGNMENT = auto()
     NIGHT = auto()
     DAY = auto()
-    DISCUSSION = auto()
+    DISCUSSION = auto()  # Added back DISCUSSION state
     END = auto()
 
 
@@ -36,13 +35,13 @@ class MafiaGame:
         # default settings
         self.settings = {
             "theme": self.theme,
-            "mafia": 1,
-            "doctor": 1,
+            "mafia": 1, 
+            "doctor": 1, 
             "detective": 1,
             "day_duration": 120,
             "night_duration": 60
         }
-
+        
         self.pending_actions = {}
         self.detective_results = {}
 
@@ -58,8 +57,8 @@ class MafiaGame:
         self.players[info["player_id"]] = {
             "player_obj": player,
             "name": info["name"],
-            "role": info.get("role", "villager"),
-            "alive": info.get("is_alive", True)
+            "role": info["role"],
+            "alive": info["is_alive"]
         }
 
     def _serializable_players(self):
@@ -98,14 +97,14 @@ class MafiaGame:
         mafia_count = new_settings.get("mafia", self.settings.get("mafia", 1))
         if not isinstance(mafia_count, int) or mafia_count < 1 or mafia_count >= len(self.players) / 2:
             raise ValueError("Invalid number of mafia")
-
+        
         if "theme" in new_settings:
             theme = new_settings["theme"]
 
         if "day_duration" in new_settings:
             if not isinstance(new_settings["day_duration"], int) or new_settings["day_duration"] <= 0:
                 raise ValueError("day_duration must be a positive integer")
-
+        
         if "night_duration" in new_settings:
             if not isinstance(new_settings["night_duration"], int) or new_settings["night_duration"] <= 0:
                 raise ValueError("night_duration must be a positive integer")
@@ -133,16 +132,12 @@ class MafiaGame:
             self.players[pid]["player_obj"].assign_role(role)
             self.players[pid]["role"] = role
 
-        # move to role assignment state (ready to be started)
         self.state = GameState.ROLE_ASSIGNMENT
         self.story_log.append({"event": "Roles assigned.", "roles_count": self.settings})
         return self._serializable_players()
 
     def start_game(self):
-        """
-        Allow starting from LOBBY (direct start) or ROLE_ASSIGNMENT (after roles assigned).
-        Previously this required WAITING which caused 'Game already started' errors.
-        """
+        """Allow starting from LOBBY or ROLE_ASSIGNMENT states."""
         if self.state not in (GameState.LOBBY, GameState.ROLE_ASSIGNMENT):
             raise Exception("Game already started")
 
@@ -162,17 +157,17 @@ class MafiaGame:
     def alive_by_role(self, role):
         """Returns a list of alive player IDs with the specified role."""
         return [pid for pid, info in self.players.items() if info["alive"] and info["role"] == role]
-
+    
     def remove_player(self, player_id):
         """Removes a player from the game (only allowed in LOBBY state)."""
         if self.state != GameState.LOBBY:
             raise Exception("Players can only leave during lobby phase")
-
+        
         if player_id in self.players:
             player_name = self.players[player_id]["name"]
             del self.players[player_id]
             self.story_log.append({"event": f"{player_name} left the game"})
-
+            
             # If the host leaves, transfer host to another player or end game
             if player_id == self.host_id and self.players:
                 new_host_id = next(iter(self.players.keys()))
@@ -181,10 +176,10 @@ class MafiaGame:
             elif player_id == self.host_id:
                 # No players left, game should be cleaned up
                 pass
-
+                
             return True
         return False
-
+    
     # ------------------- Night Phase -------------------
 
     def start_night(self):
@@ -234,6 +229,15 @@ class MafiaGame:
         if self.state != GameState.NIGHT:
             raise Exception("Can only resolve during NIGHT")
 
+        # Store night activities before processing actions
+        night_activities = {}
+        for pid, act in self.pending_actions.items():
+            player = self.players[pid]
+            night_activities[player["name"]] = {
+                "role": player["role"],
+                "action": act.get("activity", "")
+            }
+
         mafia_votes = {}
         for pid, act in self.pending_actions.items():
             if act["type"] == "kill" and self.players[pid]["role"] == "mafia":
@@ -247,7 +251,7 @@ class MafiaGame:
             mafia_target = random.choice(top_targets)
 
         doctor_targets = [act["target"] for pid, act in self.pending_actions.items()
-                          if act["type"] == "save" and self.players[pid]["role"] == "doctor"]
+                        if act["type"] == "save" and self.players[pid]["role"] == "doctor"]
         saved = mafia_target in doctor_targets if mafia_target else False
 
         for pid, act in self.pending_actions.items():
@@ -255,51 +259,53 @@ class MafiaGame:
                 target = act["target"]
                 self.detective_results[pid] = {"target": target, "role": self.players[target]["role"]}
                 self.story_log.append({"event": f"Detective {self.players[pid]['name']} investigated {self.players[target]['name']}.",
-                                       "result_for": pid})
+                                    "result_for": pid})
 
         if mafia_target and not saved:
             self.players[mafia_target]["player_obj"].eliminate()
             self.players[mafia_target]["alive"] = False
             self.players[mafia_target].setdefault("eliminated_in_round", self.round)
             self.story_log.append({"event": f"{self.players[mafia_target]['name']} was killed during Night {self.round}.",
-                                   "player_id": mafia_target})
+                                "player_id": mafia_target})
         elif mafia_target:
             self.story_log.append({"event": f"{self.players[mafia_target]['name']} was targeted but saved during Night {self.round}."})
 
+        # Clear pending actions after storing activities
         self.pending_actions = {}
         self.state = GameState.DAY
         self.story_log.append({"event": f"Day {self.round} begins."})
+
+        # Store night activities for start_day to use
+        self._last_night_activities = night_activities
+        
+        # Build special actions for story generation
+        special_actions = {"deaths": [], "revivals": []}
+        for pid, info in self.players.items():
+            if not info["alive"] and info.get("eliminated_in_round") == self.round:
+                special_actions["deaths"].append(info["name"])
+
+        # Store special actions too
+        self._last_special_actions = special_actions
 
         # check game over and end if necessary
         game_over, winners = self.check_game_over()
         if game_over:
             self.end_game()
         return {"mafia_target": mafia_target, "saved": saved, "detective_results": self.detective_results}
-
+    
     # ------------------- Day Phase -------------------
 
     def start_day(self):
+        """Generate day story using stored night activities."""
         if self.state != GameState.DAY:
             raise Exception("Not in DAY phase")
 
-        # Build night actions dict
-        night_actions = {}
-        for pid, act in self.pending_actions.items():
-            player = self.players[pid]
-            night_actions[player["name"]] = {
-                "role": player["role"],
-                "action": act.get("activity", "")
-            }
+        # Use stored activities from resolve_night
+        night_activities = getattr(self, '_last_night_activities', {})
+        special_actions = getattr(self, '_last_special_actions', {"deaths": [], "revivals": []})
 
-        # Build special actions
-        special_actions = {"deaths": [], "revivals": []}
-        for pid, info in self.players.items():
-            if not info["alive"] and info.get("eliminated_in_round") == self.round:
-                special_actions["deaths"].append(info["name"])
-            # (If you add revival logic later, populate special_actions["revivals"])
-
-        # Generate story
-        story_text = generate_mafia_story(night_actions, special_actions, self.round, self.theme)
+        # Generate story with all the collected data
+        story_text = generate_mafia_story(night_activities, special_actions, self.round, self.theme)
 
         # Save story in log
         self.story_log.append({
@@ -308,9 +314,8 @@ class MafiaGame:
         })
 
         self.state = GameState.DISCUSSION
-        self.pending_actions = {}
 
-        return {"story": story_text, "night_activities": night_actions}
+        return {"story": story_text, "night_activities": night_activities}
 
     def record_vote(self, voter_id, target_id):
         """Records a vote. Only alive players can vote."""
@@ -379,7 +384,7 @@ class MafiaGame:
             self.players[player_id]["player_obj"].eliminate()
             self.players[player_id]["alive"] = False
             self.story_log.append({"event": f"Player Eliminated: {self.players[player_id]['name']}", "player_id": player_id})
-
+    
     def check_game_over(self):
         """Return (game_over: bool, winner: str|None)."""
         alive_mafia = sum(1 for p in self.players.values() if p["alive"] and p["role"] == "mafia")
@@ -399,6 +404,6 @@ class MafiaGame:
         else:
             self.state = GameState.END
             mafias = [p["name"] for p in self.players.values() if p["role"] == "mafia"]
-            docter = [p["name"] for p in self.players.values() if p["role"] == "doctor"]
+            doctor = [p["name"] for p in self.players.values() if p["role"] == "doctor"]
             detective = [p["name"] for p in self.players.values() if p["role"] == "detective"]
-            self.story_log.append({"event": "Game Over", "winners": winners, "mafia(s)": mafias, "doctor": docter, "detective": detective})
+            self.story_log.append({"event": "Game Over", "winners": winners, "mafia(s)": mafias, "doctor": doctor, "detective": detective})
