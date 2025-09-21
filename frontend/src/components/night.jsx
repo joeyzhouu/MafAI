@@ -73,7 +73,7 @@ export default function NightPhase() {
       }
     });
 
-    s.on("night_resolved", (data) => {
+    s.on("day_started", (data) => {
       // Navigate to next phase when night resolves
       navigate("/narration", {
         state: {

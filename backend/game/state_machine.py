@@ -312,7 +312,7 @@ class MafiaGame:
             # (If you add revival logic later, populate special_actions["revivals"])
 
         # Generate story
-        story_text = generate_mafia_story(night_actions, special_actions, self.round, self.theme)
+        story_text = generate_mafia_story(night_activities, special_actions, self.round, self.theme)
         print(story_text[:10])
 
         # Save story in log

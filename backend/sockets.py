@@ -173,7 +173,7 @@ def init_socketio(sio):
     def handle_action(data):
         game_id = data.get("game_id")
         player_id = data.get("player_id")
-        action = data.get("action")  # {"type": "...", "target": "<pid>", "activity": "..."}
+        action = data.get("action")
 
         if game_id not in games:
             emit("error", {"msg": "Game not found"})
@@ -191,24 +191,25 @@ def init_socketio(sio):
             # Check if all required night actions received
             if game.all_night_actions_received():
                 print(f"All night actions received for game {game_id}, resolving...")
-                
-                # Resolve night phase
+
+                # Resolve night phase (this should generate a story)
                 result = game.resolve_night()
+
                 emit("night_resolved", {
                     "result": result,
+                    "story": result.get("story") or "The night has ended...",
                     "game_state": game.get_state()
                 }, room=game_id)
 
-                # Optionally start day immediately
-
-                print(f"Generating daytime story for game {game_id}...") 
+                # Then start day
+                print(f"Generating daytime story for game {game_id}...")
                 day_info = game.start_day()
-                print(f"Background story generated: {day_info["story"][:10]}...")
+                print(f"Daytime story generated: {day_info['story'][:10]}...")
                 emit("day_started", {
                     "story": day_info["story"],
                     "game_state": game.get_state()
                 }, room=game_id)
-                
+
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
 
