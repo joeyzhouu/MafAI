@@ -48,6 +48,22 @@ export default function PlayerRoom() {
       console.error("Socket error:", error);
     });
 
+    s.on("player_left", (data) => {
+      console.log("Player left:", data);
+      if (data.players) {
+        const playersObj = Array.isArray(data.players)
+          ? Object.fromEntries(data.players.map((p) => [p.player_id, p]))
+          : data.players;
+        setPlayers(playersObj);
+      }
+    });
+
+    s.on("game_ended", (data) => {
+      console.log("Game ended:", data);
+      alert("Game ended - returning to home");
+      navigate("/");
+    });
+
     return () => s.disconnect();
   }, [id, playerId, name, navigate]);
 
@@ -71,6 +87,18 @@ export default function PlayerRoom() {
       player_id: playerId,
       ready: !players[playerId].ready,
     });
+  };
+
+  const leaveGame = () => {
+    if (!socket) return;
+
+    socket.emit("leave_game", {
+      game_id: id,
+      player_id: playerId,
+    });
+
+    // Navigate back to home immediately
+    navigate("/");
   };
 
   const currentReady = players[playerId]?.ready || false;
@@ -103,18 +131,27 @@ export default function PlayerRoom() {
         </div>
       </div>
 
-      {/* Ready button */}
-      <button
-        onClick={toggleReady}
-        disabled={!players[playerId]} // prevent early clicks
-        className={`absolute bottom-10 left-10 px-6 py-4 text-white font-semibold rounded-xl text-lg transition ${
-          currentReady
-            ? "bg-red-500 hover:bg-red-600"
-            : "bg-green-500 hover:bg-green-600"
-        }`}
-      >
-        {currentReady ? "Unready" : "Ready"}
-      </button>
+      {/* Ready and Leave buttons */}
+      <div className="absolute bottom-10 left-10 flex gap-4">
+        <button
+          onClick={toggleReady}
+          disabled={!players[playerId]}
+          className={`px-6 py-4 text-white font-semibold rounded-xl text-lg transition ${
+            currentReady
+              ? "bg-red-500 hover:bg-red-600"
+              : "bg-green-500 hover:bg-green-600"
+          }`}
+        >
+          {currentReady ? "Unready" : "Ready"}
+        </button>
+
+        <button
+          onClick={leaveGame}
+          className="px-6 py-4 bg-gray-600 hover:bg-gray-700 text-white font-semibold rounded-xl text-lg transition"
+        >
+          Leave Game
+        </button>
+      </div>
     </div>
   );
 }
