@@ -7,55 +7,83 @@ export default function Home() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
   const [joinId, setJoinId] = useState("");
+  const [joining, setJoining] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim()) return alert("Enter a name");
-    const hostId = uuidv4();
-    const res = await createGame(hostId);
+    if (!name.trim()) return alert("Please enter a name");
+    const res = await createGame(name);
     const gameId = res.data.game_id;
-    await joinGame(gameId, hostId, name);
+    const hostId = res.data.host_id;
     navigate(`/room/${gameId}`, {
       state: { name, playerId: hostId, isHost: true },
     });
   };
 
   const handleJoin = async () => {
-    if (!name.trim() || !joinId.trim()) return alert("Enter both fields");
+    if (!name.trim()) return alert("Please enter a name");
+    if (!joinId.trim()) return alert("Enter a Game ID to join");
     const playerId = uuidv4();
     await joinGame(joinId, playerId, name);
     navigate(`/room/${joinId}`, { state: { name, playerId } });
   };
 
   return (
-    <div className="p-6 max-w-md mx-auto space-y-4">
-      <h1 className="text-2xl font-bold">mafAI</h1>
-      <input
-        className="border p-2 w-full"
-        placeholder="Your Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button
-        className="bg-green-500 text-white px-4 py-2 w-full rounded"
-        onClick={handleCreate}
-      >
-        Create Game
-      </button>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800">
+      <div className="w-full max-w-md p-8 bg-gray-900/60 rounded-2xl shadow-xl backdrop-blur text-center">
+        <h1 className="text-5xl font-extrabold text-white mb-8 tracking-wide">
+          mafAI
+        </h1>
 
-      <hr />
+        <input
+          type="text"
+          placeholder="Enter your name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full mb-6 p-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
+        />
 
-      <input
-        className="border p-2 w-full"
-        placeholder="Game ID to Join"
-        value={joinId}
-        onChange={(e) => setJoinId(e.target.value)}
-      />
-      <button
-        className="bg-blue-500 text-white px-4 py-2 w-full rounded"
-        onClick={handleJoin}
-      >
-        Join Game
-      </button>
+        {/* Action buttons */}
+        <div className="space-y-4">
+          <button
+            onClick={handleCreate}
+            className="w-full py-3 rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold text-lg transition"
+          >
+            Create Game
+          </button>
+
+          {/* Join game toggle */}
+          {!joining ? (
+            <button
+              onClick={() => setJoining(true)}
+              className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-lg transition"
+            >
+              Join Game
+            </button>
+          ) : (
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Enter Game ID"
+                value={joinId}
+                onChange={(e) => setJoinId(e.target.value)}
+                className="w-full p-3 rounded-lg border border-gray-700 bg-gray-800 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                onClick={handleJoin}
+                className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold text-lg transition"
+              >
+                Join Now
+              </button>
+              <button
+                onClick={() => setJoining(false)}
+                className="w-full py-2 text-gray-300 text-sm underline"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
