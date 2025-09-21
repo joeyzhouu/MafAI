@@ -1,7 +1,7 @@
 from flask_socketio import emit, join_room
+from flask import request
 from game.state_machine import MafiaGame, GameState
 from routes.game_routes import games  # in-memory game store
-from flask import request
 
 # socketio will be injected from app.py
 socketio = None  
@@ -23,7 +23,6 @@ def init_socketio(sio):
         join_room(game_id)
         game = games[game_id]
 
-        # Broadcast state to everyone in the room
         emit("state_update", {
             "msg": f"{player_id} joined game {game_id}",
             "players": game._serializable_players(),
@@ -101,5 +100,48 @@ def init_socketio(sio):
                     "result": result,
                     "game_state": game.get_state()
                 }, room=game_id)
+
+                # Start day right after resolving night
+                day_info = game.start_day()
+                emit("day_started", {
+                    "story": day_info["story"],
+                    "game_state": game.get_state()
+                }, room=game_id)
+        except Exception as e:
+            emit("error", {"msg": str(e)}, room=request.sid)
+
+    # ------------------- Player Voting -------------------
+    @socketio.on("cast_vote")
+    def handle_vote(data):
+        game_id = data.get("game_id")
+        voter_id = data.get("voter_id")
+        target_id = data.get("target_id")  # can be "skip"
+
+        if game_id not in games:
+            emit("error", {"msg": "Game not found"})
+            return
+
+        game = games[game_id]
+        try:
+            game.record_vote(voter_id, target_id)
+            emit("vote_recorded", {"voter": voter_id, "target": target_id}, room=game_id)
+        except Exception as e:
+            emit("error", {"msg": str(e)}, room=request.sid)
+
+    @socketio.on("resolve_votes")
+    def handle_resolve_votes(data):
+        game_id = data.get("game_id")
+
+        if game_id not in games:
+            emit("error", {"msg": "Game not found"})
+            return
+
+        game = games[game_id]
+        try:
+            result = game.resolve_votes()
+            emit("votes_resolved", {
+                "result": result,
+                "game_state": game.get_state()
+            }, room=game_id)
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)

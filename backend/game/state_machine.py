@@ -1,6 +1,7 @@
 from enum import Enum, auto
 import uuid
-import random
+import random, time
+from ai import generate_story
 
 THEMES = [
     "Space Crew vs. Aliens: A spaceship floating in deep space...",
@@ -41,6 +42,8 @@ class MafiaGame:
         self.detective_results = {}
 
         self.add_player(host_player)
+
+    # ------------------- Game Setup & Player Management -------------------
 
     def add_player(self, player):
         """Adds a player to the game lobby."""
@@ -146,6 +149,8 @@ class MafiaGame:
     def alive_by_role(self, role):
         """Returns a list of alive player IDs with the specified role."""
         return [pid for pid, info in self.players.items() if info["alive"] and info["role"] == role]
+    
+    # ------------------- Night Phase -------------------
 
     def start_night(self):
         """Transitions the game to the NIGHT phase."""
@@ -224,11 +229,91 @@ class MafiaGame:
         self.state = GameState.DAY
         self.story_log.append({"event": f"Day {self.round} begins."})
 
-        winners = self.is_game_over()
+        winners = self.check_game_over()[1]
         if winners:
             self.end_game(winners)
 
         return {"mafia_target": mafia_target, "saved": saved, "detective_results": self.detective_results}
+    
+    # ------------------- Day Phase -------------------
+
+    def start_day(self):
+        """Transitions to DAY phase and generates story."""
+        if self.state != GameState.DAY:
+            raise Exception("Can only start DAY after resolving NIGHT")
+
+        # --- AI Story Generation ---
+        night_summary = [e for e in self.story_log if f"Night {self.round}" in e.get("event", "")]
+        prompt = (
+            f"You are the storyteller of a Mafia game. "
+            f"Here are last night’s events:\n{night_summary}\n\n"
+            f"Write a short narrative summary of what happened in town. "
+            f"Include one or two pieces of red herrings to mislead players."
+        )
+
+        story = generate_story(prompt)
+        self.story_log.append({"event": f"Day {self.round} story", "story": story})
+
+        return {"story": story}
+
+    def record_vote(self, player_id, target_id):
+        """Record a vote from an alive player."""
+        player = self.players.get(player_id)
+        if not player or not player.alive:
+            raise ValueError("Dead players cannot vote")
+
+        if target_id != "skip" and target_id not in self.players:
+            raise ValueError("Invalid vote target")
+
+        self.votes[player_id] = target_id
+
+    def all_votes_received(self):
+        """Check if all alive players have voted."""
+        alive_players = [p for p in self.players.values() if p.alive]
+        return len(self.votes) == len(alive_players)
+
+    def resolve_votes(self):
+        """Tally votes and eliminate player (or skip)."""
+        if not self.votes:
+            return {"msg": "No votes were cast", "eliminated": None}
+
+        # Count votes
+        tally = {}
+        for target in self.votes.values():
+            tally[target] = tally.get(target, 0) + 1
+
+        # Find majority
+        max_votes = max(tally.values())
+        winners = [t for t, v in tally.items() if v == max_votes]
+
+        eliminated = None
+        if len(winners) == 1:
+            chosen = winners[0]
+            if chosen == "skip":
+                eliminated = None
+                msg = "The village decided to skip elimination."
+            else:
+                eliminated = chosen
+                self.players[chosen].alive = False
+                msg = f"{self.players[chosen].name} was voted out!"
+        else:
+            eliminated = None
+            msg = "Tie! No one was eliminated."
+
+        # Reset votes for next round
+        self.votes = {}
+
+        # Check win condition
+        game_over, winner = self.check_game_over()
+
+        return {
+            "msg": msg,
+            "eliminated": eliminated,
+            "tally": tally,
+            "game_over": game_over,
+            "winner": winner
+        }
+
 
     def eliminate_player(self, player_id):
         """Eliminates a player from the game (used for voting and killer)."""
@@ -236,22 +321,26 @@ class MafiaGame:
             self.players[player_id]["player_obj"].eliminate()
             self.players[player_id]["alive"] = False
             self.story_log.append({"event": f"Player Eliminated: {self.players[player_id]['name']}", "player_id": player_id})
+    
+    def check_game_over(self):
+        """Return (game_over: bool, winner: str|None)."""
+        alive_mafia = sum(1 for p in self.players.values() if p.alive and p.role == "mafia")
+        alive_town = sum(1 for p in self.players.values() if p.alive and p.role != "mafia")
 
-    def is_game_over(self):
-        """Checks if the game is over and returns the winning side if so."""
-        alive = [info for info in self.players.values() if info["alive"]]
-        mafia = [p for p in alive if p["role"] == "mafia"]
-        villagers = [p for p in alive if p["role"] != "mafia"]
+        if alive_mafia == 0:
+            return True, "town"
+        elif alive_mafia >= alive_town:
+            return True, "mafia"
+        return False, None
 
-        if not mafia:
-            return "villagers"
-        if len(mafia) >= len(villagers):
-            return "mafia"
-        return None
-
-    def end_game(self, winners):
+    def end_game(self):
         """Ends the game and records the winners."""
-        if self.is_game_over() is None:
+        game_over, winners = self.check_game_over()
+        if not game_over:
             raise Exception("Game is not over yet")
-        self.state = GameState.END
-        self.story_log.append({"event": "Game Over", "winners": winners})
+        else:
+            self.state = GameState.END
+            mafias = [p["name"] for p in self.players.values() if p["role"] == "mafia"]
+            docter = [p["name"] for p in self.players.values() if p["role"] == "doctor"]
+            detective = [p["name"] for p in self.players.values() if p["role"] == "detective"]
+            self.story_log.append({"event": "Game Over", "winners": winners, "mafia(s)": mafias, "doctor": docter, "detective": detective})

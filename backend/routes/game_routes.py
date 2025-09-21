@@ -98,17 +98,22 @@ def start_game():
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-
+# ------------------- Player Night Action -------------------
 @game_bp.route("/action", methods=["POST"])
 def player_action():
     data = request.json or {}
     game_id = data.get("game_id")
     player_id = data.get("player_id")
-    action = data.get("action")   # {"type": "kill", "target": "<pid>"}
+    action = data.get("action")  # {"type": "kill", "target": "<pid>"}
 
     game = games.get(game_id)
     if not game:
         return jsonify({"error": "Game not found"}), 404
+
+    # Only allow alive players to perform night actions
+    player_info = game.players.get(player_id)
+    if not player_info or not player_info["alive"]:
+        return jsonify({"error": "Only alive players can perform night actions"}), 403
 
     try:
         game.record_action(player_id, action)
@@ -118,5 +123,53 @@ def player_action():
             return jsonify({"status": "resolved", "result": result, "game_state": game.get_state()})
 
         return jsonify({"status": "recorded", "game_state": game.get_state()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@game_bp.route("/day/<game_id>", methods=["GET"])
+def start_day(game_id):
+    game = games.get(game_id)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+    try:
+        result = game.start_day()
+        return jsonify({"status": "ok", "result": result, "game_state": game.get_state()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@game_bp.route("/vote", methods=["POST"])
+def vote():
+    data = request.json or {}
+    game_id = data.get("game_id")
+    voter_id = data.get("voter_id")
+    target_id = data.get("target_id")  # can be "skip"
+
+    game = games.get(game_id)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+
+    # Only alive players can vote
+    voter_info = game.players.get(voter_id)
+    if not voter_info or not voter_info["alive"]:
+        return jsonify({"error": "Only alive players can vote"}), 403
+
+    try:
+        game.record_vote(voter_id, target_id)
+        return jsonify({"status": "recorded", "game_state": game.get_state()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@game_bp.route("/resolve_votes", methods=["POST"])
+def resolve_votes():
+    data = request.json or {}
+    game_id = data.get("game_id")
+
+    game = games.get(game_id)
+    if not game:
+        return jsonify({"error": "Game not found"}), 404
+
+    try:
+        result = game.resolve_votes()
+        return jsonify({"status": "resolved", "result": result, "game_state": game.get_state()})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
