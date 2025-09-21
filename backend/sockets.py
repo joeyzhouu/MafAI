@@ -96,12 +96,23 @@ def init_socketio(sio):
             return
 
         try:
+            # Assign roles and notify all players
             players_roles = game.assign_roles()
             emit("role_assigned", {"players": players_roles}, room=game_id)
 
-            # Immediately start night 1
+            # Run state machine start_game (generates background story)
+            result = game.start_game()
+            background = result.get("background_story")
+
+            # Switch to night phase
             game.start_night()
-            emit("game_started", {"game_state": game.get_state()}, room=game_id)
+
+            # Broadcast game started + background story + state
+            emit("game_started", {
+                "background_story": background,
+                "game_state": game.get_state()
+            }, room=game_id)
+
         except Exception as e:
             emit("error", {"msg": str(e)}, room=request.sid)
 
